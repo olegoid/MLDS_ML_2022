@@ -33,6 +33,31 @@ class Items(BaseModel):
 
 @app.post("/predict_item")
 def predict_item(item: Item) -> float:
+    df = item_to_df(item)
+    y_pred = model.predict(df)
+    
+    return float(y_pred[0])
+
+
+@app.post("/predict_items")
+def predict_items(items: List[Item]) -> List[float]:
+    df_full = pd.DataFrame()
+    
+    for i in range(0, len(items)):
+        item = items[i]
+        df = item_to_df(item)
+        
+        df_full = pd.concat([df_full, df])
+        
+    y_pred = model.predict(df_full)
+    result = []
+    
+    for i in range(len(y_pred)):
+        result.append(y_pred[i][0])
+    
+    return result
+
+def item_to_df(item):
     df = pd.DataFrame()
     
     df['name'] = [item.name]
@@ -54,14 +79,7 @@ def predict_item(item: Item) -> float:
     df = encode_categorical_predictors(df)
     df = df.iloc[-1].to_frame().T
     
-    y_pred = model.predict(df)
-    
-    return float(y_pred[0])
-
-
-@app.post("/predict_items")
-def predict_items(items: List[Item]) -> List[float]:
-    return 'ok'
+    return df
 
 def groom_data(df):
     # clean df
