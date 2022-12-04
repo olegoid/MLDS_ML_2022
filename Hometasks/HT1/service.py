@@ -10,7 +10,6 @@ from sklearn.preprocessing import OneHotEncoder
 app = FastAPI()
 model = joblib.load('my_model.pkl')
 ohe = OneHotEncoder()
-df_test = pd.read_csv('https://raw.githubusercontent.com/Murcha1990/MLDS_ML_2022/main/Hometasks/HT1/cars_test.csv')
 
 class Item(BaseModel):
     name: str
@@ -36,6 +35,7 @@ class Items(BaseModel):
 def predict_item(item: Item) -> float:
     df = pd.DataFrame()
     
+    df['name'] = [item.name]
     df['year'] = [item.year]
     df['selling_price'] = [item.selling_price]
     df['km_driven'] = [item.km_driven]
@@ -45,18 +45,18 @@ def predict_item(item: Item) -> float:
     df['owner'] = [item.owner]
     df['mileage'] = [item.mileage]
     df['engine'] = [item.engine]
-    df['max_power'] = [item.engine]
+    df['max_power'] = [item.max_power]
     df['torque'] = [item.torque]
     df['seats'] = [item.seats]
     
-    df = pd.concat([df_test, df])
+    df = pd.concat([df])
     df = groom_data(df)
     df = encode_categorical_predictors(df)
-    df = df.iloc[-1]
+    df = df.iloc[-1].to_frame().T
     
-    print(df)
+    y_pred = model.predict(df)
     
-    return 'ok'
+    return float(y_pred[0])
 
 
 @app.post("/predict_items")
@@ -68,15 +68,16 @@ def groom_data(df):
     df = clean_mileage(df)
     df = clean_engine(df)
     df = clean_max_power(df)
-    df = fill_the_gaps(df)
     
     # cast engine and seats to int
     df['engine'] = df['engine'].astype(int)
     df['seats'] = df['seats'].astype(int)
     
-    # drop_selling_price
+    # drop columns
     df = df.drop('selling_price', axis=1)
     df = df.drop('torque', axis=1)
+    df = df.drop('name', axis=1)
+    df = df.drop('fuel', axis=1)
     
     # use medians of max_torque_rpm and torque here to reduce complexity
     df['max_torque_rpm'] = 2400.0
@@ -122,46 +123,97 @@ def one_hot_encode(df, column_name, column_to_drop):
     df[ohe.categories_[0]] = transformed.toarray()
 
     df = df.drop(column_name, axis=1)
-    df = df.drop(column_to_drop, axis=1)
+    
+    if column_to_drop in df.columns:
+        df = df.drop(column_to_drop, axis=1)
     
     return df
 
 def encode_categorical_predictors(df):
     # owner
-    df = one_hot_encode(df, 'owner', 'First Owner')
+    df = encode_owner(df)
 
     # transmission
-    df = one_hot_encode(df, 'transmission', 'Automatic')
+    df = encode_transmission(df)
 
     # seller_type
+    df = encode_seller_type(df)
+    
+    # seats
+    df = encode_seats(df)
+    
+    return df
+
+def encode_seller_type(df):
     df = one_hot_encode(df, 'seller_type', 'Trustmark Dealer')
     
+    if 'Dealer' not in df.columns:
+        df['Dealer'] = 0
+    
+    if 'Individual' not in df.columns:
+        df['Individual'] = 0
+    
+    return df
+
+def encode_owner(df):
+    df = one_hot_encode(df, 'owner', 'First Owner')
+    
+    if 'Second Owner' not in df.columns:
+        df['Second Owner'] = 0
+    
+    if 'Third Owner' not in df.columns:
+        df['Third Owner'] = 0
+    
+    if 'Fourth & Above Owner' not in df.columns:
+        df['Fourth & Above Owner'] = 0
+    
+    if 'Test Drive Car' not in df.columns:
+        df['Test Drive Car'] = 0
+    
+    return df
+
+def encode_transmission(df):
+    df = one_hot_encode(df, 'transmission', 'Automatic')
+    
+    if 'Manual' not in df.columns:
+        df['Manual'] = 0
+    
+    return df
+
+def encode_seats(df):
     df['seats'] = df['seats'].astype(object)
 
     transformed = ohe.fit_transform(df[['seats']])
     df[ohe.categories_[0]] = transformed.toarray()
 
     df = df.drop('seats', axis=1)
-    df = df.drop(4, axis=1)
+    if 4 in df.columns:
+        df = df.drop('seats', axis=1)
+        
     df.rename(columns={2: '2', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 14: '14'}, inplace=True)
     
-    return df
+    if '2' not in df.columns:
+        df['2'] = 0
     
-def fill_the_gaps(df):
-    # mileage
-    median = df['mileage'].median()
-    df['mileage'].fillna(median, inplace=True)
-
-    # engine
-    median = df['engine'].median()
-    df['engine'].fillna(median, inplace=True)
-
-    # max_power
-    median = df['max_power'].median()
-    df['max_power'].fillna(median, inplace=True)
-
-    # seats
-    median = df['seats'].median()
-    df['seats'].fillna(median, inplace=True)
+    if '5' not in df.columns:
+        df['5'] = 0
+    
+    if '6' not in df.columns:
+        df['6'] = 0
+        
+    if '7' not in df.columns:
+        df['7'] = 0
+        
+    if '8' not in df.columns:
+        df['8'] = 0
+        
+    if '9' not in df.columns:
+        df['9'] = 0
+        
+    if '10' not in df.columns:
+        df['10'] = 0
+        
+    if '14' not in df.columns:
+        df['14'] = 0
     
     return df
